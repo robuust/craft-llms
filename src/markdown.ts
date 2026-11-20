@@ -251,10 +251,16 @@ export function docPathToUrl(relativePath: string, baseUrl: string): string {
   return `${normalizedBase}${mapped.replace(/^\//, '')}`;
 }
 
-export function normalizeLinks(
-  content: string,
-  options: { baseUrl: string; currentFilePath: string },
-): string {
+type LinkContext = {
+  /** Docs URL of the current version, such as https://craftcms.com/docs/5.x/. */
+  baseUrl: string;
+  /** Path of the current file, relative to the version's docs root. */
+  currentFilePath: string;
+  /** URL that root-relative links resolve against. Defaults to the parent of `baseUrl`. */
+  siteUrl?: string;
+};
+
+export function normalizeLinks(content: string, options: LinkContext): string {
   const lines = content.split('\n');
   let state: FenceState = { inFence: false, fenceMarker: '' };
   const output: string[] = [];
@@ -267,19 +273,11 @@ export function normalizeLinks(
     }
 
     const normalizedInline = line.replace(INLINE_LINK_RE, (match, text, destination) => {
-      const normalizedDestination = normalizeLinkDestination(
-        destination,
-        options.currentFilePath,
-        options.baseUrl,
-      );
+      const normalizedDestination = normalizeLinkDestination(destination, options);
       return `[${text}](${normalizedDestination})`;
     });
 
-    const normalizedReference = normalizeReferenceDefinition(
-      normalizedInline,
-      options.currentFilePath,
-      options.baseUrl,
-    );
+    const normalizedReference = normalizeReferenceDefinition(normalizedInline, options);
 
     output.push(normalizedReference);
   }
@@ -319,11 +317,7 @@ export function extractSummary(content: string): string {
   return cleanSummaryText(paragraph.join(' '));
 }
 
-function normalizeReferenceDefinition(
-  line: string,
-  currentFilePath: string,
-  baseUrl: string,
-): string {
+function normalizeReferenceDefinition(line: string, context: LinkContext): string {
   const match = line.match(/^(\s*\[[^\]]+\]:\s*)(\S+)([\s\S]*)$/);
   if (!match) {
     return line;
@@ -331,15 +325,11 @@ function normalizeReferenceDefinition(
   const prefix = match[1];
   const destination = match[2];
   const rest = match[3] ?? '';
-  const normalizedDestination = normalizeLinkDestination(destination, currentFilePath, baseUrl);
+  const normalizedDestination = normalizeLinkDestination(destination, context);
   return `${prefix}${normalizedDestination}${rest}`;
 }
 
-function normalizeLinkDestination(
-  rawDestination: string,
-  currentFilePath: string,
-  baseUrl: string,
-): string {
+function normalizeLinkDestination(rawDestination: string, context: LinkContext): string {
   const leading = rawDestination.match(/^\s*/)?.[0] ?? '';
   const trailing = rawDestination.match(/\s*$/)?.[0] ?? '';
   const inner = rawDestination.slice(leading.length, rawDestination.length - trailing.length);
@@ -353,7 +343,7 @@ function normalizeLinkDestination(
     if (end !== -1) {
       const url = inner.slice(1, end);
       const rest = inner.slice(end + 1);
-      const normalized = normalizeDocLink(url, currentFilePath, baseUrl);
+      const normalized = normalizeDocLink(url, context);
       return `${leading}<${normalized}>${rest}${trailing}`;
     }
   }
@@ -365,15 +355,15 @@ function normalizeLinkDestination(
 
   const url = match[1];
   const rest = match[2] ?? '';
-  const normalized = normalizeDocLink(url, currentFilePath, baseUrl);
+  const normalized = normalizeDocLink(url, context);
   return `${leading}${normalized}${rest}${trailing}`;
 }
 
-function normalizeDocLink(url: string, currentFilePath: string, baseUrl: string): string {
+function normalizeDocLink(url: string, context: LinkContext): string {
   if (!url || url.startsWith('#')) {
     return url;
   }
-  if (url.startsWith('//') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) {
+  if (url.startsWith('//') || /^<?[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) {
     return url;
   }
 
@@ -391,27 +381,24 @@ function normalizeDocLink(url: string, currentFilePath: string, baseUrl: string)
     pathPart = pathPart.slice(0, queryIndex);
   }
 
-  let isRoot = false;
-  if (pathPart.startsWith('/')) {
-    isRoot = true;
-    pathPart = pathPart.replace(/^\/docs\/5\.x\//, '');
-    pathPart = pathPart.replace(/^\/+/, '');
-  }
-
-  if (!pathPart) {
+  if (!pathPart || pathPart === '/') {
     return url;
   }
 
-  let resolvedPath = pathPart;
-  if (!isRoot) {
-    resolvedPath = path.posix.normalize(
-      path.posix.join(path.posix.dirname(currentFilePath), pathPart),
-    );
+  const baseUrl = context.baseUrl.endsWith('/') ? context.baseUrl : `${context.baseUrl}/`;
+
+  // Root-relative links point into the docs source root, for example /5.x/install.md
+  // or /commerce/5.x/README.md, so they resolve against the site URL, not the version.
+  if (pathPart.startsWith('/')) {
+    const siteUrl = context.siteUrl ?? new URL('../', baseUrl).toString();
+    const rootPath = pathPart.replace(/^\/+/, '').replace(/^docs\//, '');
+    return `${new URL(mapDocPath(rootPath), siteUrl).toString()}${query}${hash}`;
   }
 
-  const mappedPath = mapDocPath(resolvedPath);
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return `${normalizedBase}${mappedPath.replace(/^\//, '')}${query}${hash}`;
+  const resolvedPath = path.posix.normalize(
+    path.posix.join(path.posix.dirname(context.currentFilePath), pathPart),
+  );
+  return `${new URL(mapDocPath(resolvedPath), baseUrl).toString()}${query}${hash}`;
 }
 
 function mapDocPath(docPath: string): string {
