@@ -11,7 +11,7 @@ craft-llms is a CLI tool that generates a versioned, LLM-friendly docs index fro
 - `{major}/llms-full.txt` - Full concatenated documentation with all pages
 - `{major}/llms.txt` - Index of all pages with titles, URLs, and summaries
 
-The `Docs index` workflow publishes the output to the `index` branch through `scripts/publish-index.sh`. Keep the `index.json` shape and the `llms.txt` format stable: `robuust/boost` and the legacy MCP read them.
+Netlify builds and serves the output. Keep the `index.json` shape and the `llms.txt` format stable: `robuust/boost` and the legacy MCP read them.
 
 ## Commands
 
