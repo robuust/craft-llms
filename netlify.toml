@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build && node dist/src/cli.js build"
+  command = "npm run build && node dist/src/cli.js build && node dist/src/cli.js validate"
   publish = "public"
 
 [[redirects]]
