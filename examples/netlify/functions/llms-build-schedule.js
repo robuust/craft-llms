@@ -3,7 +3,7 @@ export async function handler() {
   if (!hookUrl) {
     return {
       statusCode: 500,
-      body: 'Missing BUILD_HOOK_URL env var.'
+      body: 'Missing BUILD_HOOK_URL env var.',
     };
   }
 
@@ -12,6 +12,6 @@ export async function handler() {
 
   return {
     statusCode: response.ok ? 200 : 500,
-    body
+    body,
   };
 }

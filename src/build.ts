@@ -1,110 +1,192 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { ensureDocsRepo, getRepoMeta } from './git.js';
+import { ensureDocsRepo, getRepoMeta, type RepoMeta } from './git.js';
 import {
   docPathToUrl,
   expandIncludeDirectives,
+  extractHeadings,
   extractSummary,
   extractTitle,
   normalizeLinks,
   stripFrontmatter,
   stripLeadingH1,
-  stripVuePressDirectives
+  stripVuePressDirectives,
 } from './markdown.js';
-import type { BuildConfig } from './config.js';
+import { baseUrlFor, sourceName, type BuildConfig } from './config.js';
 
-export type BuildResult = {
-  fullPath: string;
-  indexPath: string;
-  totalFiles: number;
+export type IndexPage = {
+  /** Source path relative to the docs repository root, such as `docs/5.x/install.md`. */
+  path: string;
+  title: string;
+  url: string;
+  headings: string[];
 };
 
-type IndexEntry = {
+export type DocsIndex = {
+  major: string;
+  source: string;
+  revision: string;
+  generated_at: string;
+  pages: IndexPage[];
+};
+
+export type MajorResult = {
+  major: string;
+  dir: string;
+  totalPages: number;
+};
+
+export type BuildResult = {
+  outputDir: string;
+  revision: string;
+  majors: MajorResult[];
+};
+
+type ListEntry = {
   title: string;
   url: string;
   summary: string;
   relPath: string;
 };
 
-export async function build(config: BuildConfig): Promise<BuildResult> {
+export async function build(config: BuildConfig, now: Date = new Date()): Promise<BuildResult> {
   const docsRepoDir = path.resolve(config.docsDir);
   const outputDir = path.resolve(config.outputDir);
-  const baseUrl = config.baseUrl.endsWith('/') ? config.baseUrl : `${config.baseUrl}/`;
 
   await ensureDocsRepo(docsRepoDir, config.docsRepo);
-  const primaryDocsRoot = path.join(docsRepoDir, 'docs', 'docs', '5.x');
-  const fallbackDocsRoot = path.join(docsRepoDir, 'docs', '5.x');
-  const docsRoot = await resolveDocsRoot([primaryDocsRoot, fallbackDocsRoot]);
+  const meta = await getRepoMeta(docsRepoDir);
+  const generatedAt = now.toISOString();
+  const source = sourceName(config.docsRepo);
 
+  const majors: MajorResult[] = [];
+  for (const major of config.majors) {
+    majors.push(
+      await buildMajor({
+        major,
+        docsRepoDir,
+        outputDir,
+        baseUrl: baseUrlFor(config, major),
+        meta,
+        source,
+        generatedAt,
+      }),
+    );
+  }
+
+  return { outputDir, revision: meta.revision, majors };
+}
+
+async function buildMajor(options: {
+  major: string;
+  docsRepoDir: string;
+  outputDir: string;
+  baseUrl: string;
+  meta: RepoMeta;
+  source: string;
+  generatedAt: string;
+}): Promise<MajorResult> {
+  const { major, docsRepoDir, baseUrl, meta } = options;
+  const docsRoot = await resolveDocsRoot([
+    path.join(docsRepoDir, 'docs', `${major}.x`),
+    path.join(docsRepoDir, 'docs', 'docs', `${major}.x`),
+  ]);
   const files = await collectMarkdownFiles(docsRoot);
-  const { commit, timestamp } = await getRepoMeta(docsRepoDir);
+  if (files.length === 0) {
+    throw new Error(`No Markdown pages found in ${docsRoot}`);
+  }
 
-  const headerLines = [
-    '# Craft CMS Documentation',
-    'Craft CMS 5.x documentation covering installation, configuration, templating, and extension points.',
-    `Last updated: ${timestamp} (commit ${commit})`,
-    ''
-  ];
+  const majorDir = path.join(options.outputDir, major);
+  await fs.rm(majorDir, { recursive: true, force: true });
+  await fs.mkdir(majorDir, { recursive: true });
 
   const pageChunks: string[] = [];
-  const indexGroups = new Map<string, IndexEntry[]>();
+  const listGroups = new Map<string, ListEntry[]>();
+  const pages: IndexPage[] = [];
 
   for (const filePath of files) {
     const raw = await fs.readFile(filePath, 'utf8');
     const withoutFrontmatter = stripFrontmatter(raw);
     const expanded = await expandIncludeDirectives(withoutFrontmatter, {
       repoRoot: docsRepoDir,
-      currentFilePath: filePath
+      currentFilePath: filePath,
     });
     const cleaned = stripVuePressDirectives(expanded);
 
     const relPath = toPosixPath(path.relative(docsRoot, filePath));
+    const repoPath = toPosixPath(path.relative(docsRepoDir, filePath));
     const fallbackTitle = path.basename(filePath, path.extname(filePath));
     const title = extractTitle(cleaned, fallbackTitle);
 
     const contentWithoutTitle = stripLeadingH1(cleaned);
     const normalizedContent = normalizeLinks(contentWithoutTitle, {
       baseUrl,
-      currentFilePath: relPath
+      currentFilePath: relPath,
     }).trimEnd();
 
     pageChunks.push('---', `# ${title}`, normalizedContent, '');
 
-    const summary = extractSummary(contentWithoutTitle);
     const url = docPathToUrl(relPath, baseUrl);
+    pages.push({ path: repoPath, title, url, headings: extractHeadings(expanded) });
+    await writeFile(
+      path.join(majorDir, 'pages', repoPath),
+      `# ${title}\n\n${normalizedContent.trimStart()}\n`,
+    );
+
+    const summary = extractSummary(contentWithoutTitle);
     const group = relPath.includes('/') ? relPath.split('/')[0] : 'root';
-    const entries = indexGroups.get(group) ?? [];
+    const entries = listGroups.get(group) ?? [];
     entries.push({ title, url, summary, relPath });
-    indexGroups.set(group, entries);
+    listGroups.set(group, entries);
   }
 
-  const fullText = `${headerLines.join('\n')}\n${pageChunks.join('\n').trimEnd()}\n`;
+  pages.sort((a, b) => compare(a.path, b.path));
+  const index: DocsIndex = {
+    major,
+    source: options.source,
+    revision: meta.revision,
+    generated_at: options.generatedAt,
+    pages,
+  };
+  await writeFile(path.join(majorDir, 'index.json'), `${JSON.stringify(index, null, 2)}\n`);
+  await writeFile(path.join(majorDir, 'llms-full.txt'), renderFullText(major, meta, pageChunks));
+  await writeFile(path.join(majorDir, 'llms.txt'), renderListText(meta, listGroups));
 
-  const indexLines: string[] = [];
-  indexLines.push('# Craft CMS Documentation Index');
-  indexLines.push(`Last updated: ${timestamp} (commit ${commit})`, '');
+  return { major, dir: majorDir, totalPages: pages.length };
+}
 
-  const sortedGroups = Array.from(indexGroups.keys()).sort((a, b) => a.localeCompare(b));
+function renderFullText(major: string, meta: RepoMeta, pageChunks: string[]): string {
+  const headerLines = [
+    '# Craft CMS Documentation',
+    `Craft CMS ${major}.x documentation covering installation, configuration, templating, and extension points.`,
+    `Last updated: ${meta.timestamp} (commit ${meta.commit})`,
+    '',
+  ];
+  return `${headerLines.join('\n')}\n${pageChunks.join('\n').trimEnd()}\n`;
+}
+
+function renderListText(meta: RepoMeta, groups: Map<string, ListEntry[]>): string {
+  const lines: string[] = [];
+  lines.push('# Craft CMS Documentation Index');
+  lines.push(`Last updated: ${meta.timestamp} (commit ${meta.commit})`, '');
+
+  const sortedGroups = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b));
   for (const group of sortedGroups) {
-    indexLines.push(`## ${group}`);
-    const entries = indexGroups.get(group) ?? [];
+    lines.push(`## ${group}`);
+    const entries = groups.get(group) ?? [];
     entries.sort((a, b) => a.relPath.localeCompare(b.relPath));
     for (const entry of entries) {
       const summary = entry.summary ? ` — ${entry.summary}` : '';
-      indexLines.push(`- [${entry.title}](${entry.url})${summary}`);
+      lines.push(`- [${entry.title}](${entry.url})${summary}`);
     }
-    indexLines.push('');
+    lines.push('');
   }
 
-  const indexText = `${indexLines.join('\n').trimEnd()}\n`;
+  return `${lines.join('\n').trimEnd()}\n`;
+}
 
-  await fs.mkdir(outputDir, { recursive: true });
-  const fullPath = path.join(outputDir, 'llms-full.txt');
-  const indexPath = path.join(outputDir, 'llms.txt');
-  await fs.writeFile(fullPath, fullText, 'utf8');
-  await fs.writeFile(indexPath, indexText, 'utf8');
-
-  return { fullPath, indexPath, totalFiles: files.length };
+async function writeFile(filePath: string, contents: string): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, contents, 'utf8');
 }
 
 async function resolveDocsRoot(candidates: string[]): Promise<string> {
@@ -123,7 +205,9 @@ async function collectMarkdownFiles(rootDir: string): Promise<string[]> {
   const entries = await fs.readdir(rootDir, { withFileTypes: true });
   const files: string[] = [];
 
-  const dirs = entries.filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  const dirs = entries
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name));
   const mdFiles = entries
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -139,6 +223,10 @@ async function collectMarkdownFiles(rootDir: string): Promise<string[]> {
   }
 
   return files;
+}
+
+function compare(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function toPosixPath(filePath: string): string {

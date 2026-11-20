@@ -29,8 +29,18 @@ export async function ensureDocsRepo(repoDir: string, repoUrl: string): Promise<
   await runGit(['-C', repoDir, 'pull', '--ff-only']);
 }
 
-export async function getRepoMeta(repoDir: string): Promise<{ commit: string; timestamp: string }> {
+export type RepoMeta = {
+  /** Full commit SHA. */
+  revision: string;
+  /** Abbreviated commit SHA, as printed in llms.txt. */
+  commit: string;
+  /** Commit date in ISO 8601. */
+  timestamp: string;
+};
+
+export async function getRepoMeta(repoDir: string): Promise<RepoMeta> {
+  const revision = (await runGit(['-C', repoDir, 'rev-parse', 'HEAD'])).trim();
   const commit = (await runGit(['-C', repoDir, 'rev-parse', '--short', 'HEAD'])).trim();
   const timestamp = (await runGit(['-C', repoDir, 'log', '-1', '--format=%cI'])).trim();
-  return { commit, timestamp };
+  return { revision, commit, timestamp };
 }
