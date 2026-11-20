@@ -549,3 +549,30 @@ function componentText(tagName: string, attrs: Record<string, string>): string {
   }
   return attrs.text ?? attrs.label ?? attrs.title ?? '';
 }
+
+/**
+ * Returns the plain text of the H2 and H3 headings outside code fences, without
+ * VuePress components (such as `<Since>`), inline Markdown or custom `{#anchor}` ids.
+ */
+export function extractHeadings(content: string): string[] {
+  const lines = content.split('\n');
+  let state: FenceState = { inFence: false, fenceMarker: '' };
+  const headings: string[] = [];
+
+  for (const line of lines) {
+    state = updateFenceState(line, state);
+    if (state.inFence) {
+      continue;
+    }
+    const match = line.match(/^#{2,3}\s+(.+?)\s*#*\s*$/);
+    if (!match) {
+      continue;
+    }
+    const text = cleanSummaryText(match[1].replace(/\s*\{#[^}]*\}\s*$/, ''));
+    if (text) {
+      headings.push(text);
+    }
+  }
+
+  return headings;
+}
