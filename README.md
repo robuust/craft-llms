@@ -60,26 +60,14 @@ A rebuild replaces each major's folder, so pages removed from the docs disappear
 
 ## Where the index is served
 
-The [Docs index](.github/workflows/index.yml) workflow builds the index every Monday and on demand (**Actions → Docs index → Run workflow**). It runs the linter and tests, builds into a temporary folder and commits the result to the `index` branch, which holds only the build output. A run that would change only `generated_at` makes no commit.
-
-Read the index from the branch:
+Netlify builds `public/` from `main` and serves it at `https://craft-llms.netlify.app`. A [scheduled function](netlify/functions/llms-build-schedule.js) triggers a rebuild every week through the build hook in `BUILD_HOOK_URL`.
 
 ```text
-https://raw.githubusercontent.com/robuust/craft-llms/index/5/index.json
-https://raw.githubusercontent.com/robuust/craft-llms/index/5/pages/docs/5.x/install.md
+https://craft-llms.netlify.app/5/index.json
+https://craft-llms.netlify.app/5/pages/docs/5.x/install.md
 ```
 
-`robuust/boost` uses `https://raw.githubusercontent.com/robuust/craft-llms/index` as its default docs base URL. GitHub Pages (`https://robuust.github.io/craft-llms/`) can serve the same tree later; switching needs an organization owner to enable Pages.
-
-To publish by hand, build and run the publish script. It validates the output first, and `PUBLISH_DRY_RUN=1` commits in a temporary worktree without pushing:
-
-```bash
-npm run build
-OUTPUT_DIR=public node dist/src/cli.js build
-scripts/publish-index.sh public index
-```
-
-The Netlify site still builds `public/` and rewrites the legacy `/llms.txt` and `/llms-full.txt` URLs to the Craft 5 files.
+`robuust/boost` uses `https://craft-llms.netlify.app` as its default docs base URL. The legacy `/llms.txt` and `/llms-full.txt` URLs rewrite to the Craft 5 files.
 
 ## Configuration
 
@@ -91,11 +79,8 @@ Environment variables (defaults shown):
 - `DOCS_REPO=https://github.com/craftcms/docs`
 - `DOCS_DIR=.cache/craftcms-docs`
 
-`scripts/publish-index.sh` also reads `PUBLISH_REMOTE` (default `origin`) and `PUBLISH_DRY_RUN`.
-
 ## Scheduler examples
 
-- GitHub Actions: `.github/workflows/index.yml` (the `index` branch).
 - Netlify scheduled function: `examples/netlify/functions/llms-build-schedule.js` (uses `BUILD_HOOK_URL`).
 - Render cron job command:
 
