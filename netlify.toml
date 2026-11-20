@@ -8,5 +8,18 @@
   status = 301
   force = true
 
+# The build writes one folder per Craft major. Keep the legacy root URLs on Craft 5.
+[[redirects]]
+  from = "/llms.txt"
+  to = "/5/llms.txt"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/llms-full.txt"
+  to = "/5/llms-full.txt"
+  status = 200
+  force = true
+
 [functions."llms-build-schedule"]
   schedule = "@weekly"
