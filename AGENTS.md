@@ -5,6 +5,7 @@ This file provides guidance to AI coding agents when working with code in this r
 ## Project Overview
 
 craft-llms is a CLI tool that generates LLM-friendly documentation files from the Craft CMS docs repository. It clones/updates the craftcms/docs repo, processes the markdown files, and outputs two files:
+
 - `public/llms-full.txt` - Full concatenated documentation with all pages
 - `public/llms.txt` - Index of all pages with titles, URLs, and summaries
 
@@ -20,11 +21,13 @@ npm run test           # Build then run tests with Node test runner
 ```
 
 Run a single test:
+
 ```bash
 npm run build && node --test dist/test/markdown.test.js
 ```
 
 Run the CLI locally:
+
 ```bash
 node dist/src/cli.js build
 ```

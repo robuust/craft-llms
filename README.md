@@ -21,6 +21,7 @@ node dist/src/cli.js build
 ```
 
 Outputs:
+
 - `public/llms-full.txt`
 - `public/llms.txt`
 

@@ -30,5 +30,7 @@ if (command === 'build') {
 }
 
 function printHelp(): void {
-  console.log(`craft-llms build\n\nGenerates public/llms-full.txt and public/llms.txt from Craft CMS docs.\n\nEnvironment variables:\n  OUTPUT_DIR   Output directory (default: public)\n  BASE_URL     Base docs URL (default: https://craftcms.com/docs/5.x/)\n  DOCS_REPO    Docs repository (default: https://github.com/craftcms/docs)\n  DOCS_DIR     Local clone directory (default: .cache/craftcms-docs)`);
+  console.log(
+    `craft-llms build\n\nGenerates public/llms-full.txt and public/llms.txt from Craft CMS docs.\n\nEnvironment variables:\n  OUTPUT_DIR   Output directory (default: public)\n  BASE_URL     Base docs URL (default: https://craftcms.com/docs/5.x/)\n  DOCS_REPO    Docs repository (default: https://github.com/craftcms/docs)\n  DOCS_DIR     Local clone directory (default: .cache/craftcms-docs)`,
+  );
 }

@@ -13,7 +13,15 @@ const INCLUDE_DIRECTIVE_RE = /!!!include\(([^)]+)\)!!!/g;
 const COMPONENT_TAG_RE = /<\/?([A-Za-z][^\s/>]*)(\s[^>]*)?>/g;
 const HTML_TAG_ONLY_RE = /^<[^>]+>$/;
 const INLINE_COMPONENT_TAGS = new Set(['badge', 'cloud', 'journey', 'see', 'since', 'todo']);
-const DROP_COMPONENT_TAGS = new Set(['block', 'browsershot', 'codeplaceholder', 'column', 'columns', 'tab', 'tabs']);
+const DROP_COMPONENT_TAGS = new Set([
+  'block',
+  'browsershot',
+  'codeplaceholder',
+  'column',
+  'columns',
+  'tab',
+  'tabs',
+]);
 const STANDARD_HTML_TAGS = new Set([
   'a',
   'abbr',
@@ -86,7 +94,7 @@ const STANDARD_HTML_TAGS = new Set([
   'tr',
   'u',
   'ul',
-  'var'
+  'var',
 ]);
 
 function updateFenceState(line: string, state: FenceState): FenceState {
@@ -431,7 +439,11 @@ function cleanSummaryText(text: string): string {
   return cleaned;
 }
 
-function resolveIncludePath(includePath: string, repoRoot: string, currentFilePath: string): string {
+function resolveIncludePath(
+  includePath: string,
+  repoRoot: string,
+  currentFilePath: string,
+): string {
   let resolvedPath = '';
   if (includePath.startsWith('/')) {
     resolvedPath = path.join(repoRoot, includePath.replace(/^\/+/, ''));

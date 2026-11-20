@@ -9,7 +9,7 @@ import {
   normalizeLinks,
   stripFrontmatter,
   stripLeadingH1,
-  stripVuePressDirectives
+  stripVuePressDirectives,
 } from './markdown.js';
 import type { BuildConfig } from './config.js';
 
@@ -43,7 +43,7 @@ export async function build(config: BuildConfig): Promise<BuildResult> {
     '# Craft CMS Documentation',
     'Craft CMS 5.x documentation covering installation, configuration, templating, and extension points.',
     `Last updated: ${timestamp} (commit ${commit})`,
-    ''
+    '',
   ];
 
   const pageChunks: string[] = [];
@@ -54,7 +54,7 @@ export async function build(config: BuildConfig): Promise<BuildResult> {
     const withoutFrontmatter = stripFrontmatter(raw);
     const expanded = await expandIncludeDirectives(withoutFrontmatter, {
       repoRoot: docsRepoDir,
-      currentFilePath: filePath
+      currentFilePath: filePath,
     });
     const cleaned = stripVuePressDirectives(expanded);
 
@@ -65,7 +65,7 @@ export async function build(config: BuildConfig): Promise<BuildResult> {
     const contentWithoutTitle = stripLeadingH1(cleaned);
     const normalizedContent = normalizeLinks(contentWithoutTitle, {
       baseUrl,
-      currentFilePath: relPath
+      currentFilePath: relPath,
     }).trimEnd();
 
     pageChunks.push('---', `# ${title}`, normalizedContent, '');
@@ -123,7 +123,9 @@ async function collectMarkdownFiles(rootDir: string): Promise<string[]> {
   const entries = await fs.readdir(rootDir, { withFileTypes: true });
   const files: string[] = [];
 
-  const dirs = entries.filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  const dirs = entries
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name));
   const mdFiles = entries
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
     .sort((a, b) => a.name.localeCompare(b.name));
